@@ -1,0 +1,5 @@
+-q -U google-genai  
+fastapi 
+uvicorn     
+pandas 
+python-multipart
