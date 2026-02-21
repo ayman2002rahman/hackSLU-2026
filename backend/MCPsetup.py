@@ -1,9 +1,17 @@
 from google import genai
 import pandas as pd
+from dotenv import load_dotenv
+import os
 
-client = genai.Client(api_key="AIzaSyBpIFjuK6KXObx-tRplqSDWEWjkKwt3anY")
+load_dotenv()  # reads .env into environment
+GEMINI_API_KEY = os.getenv("GEMINI_KEY")
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_KEY not set. Add it to a .env file or your environment.")
 
-response = client.models.generate_content(
+client = genai.Client(api_key=GEMINI_API_KEY)
+
+def geminiCall():
+    response = client.models.generate_content(
     model="gemini-3-flash-preview", contents= 
     '''You are an inventory assistant. I will provide store data as CSV. 
 Please generate restock suggestions in **strict JSON format**, following this schema:
@@ -18,6 +26,6 @@ Please generate restock suggestions in **strict JSON format**, following this sc
 ]
 
 Do not include explanations, markdown, or extra characters. Only return valid JSON.'''
-)
 
-print(response.text)
+  return response.text
+)
