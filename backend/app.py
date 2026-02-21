@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from MCPsetup import geminiCall
 
 app = FastAPI()
 
@@ -8,4 +9,5 @@ def root():
 
 @app.get("/test")
 def test():
-    return {"status": "success", "data": 123}
+    testResult = geminiCall()
+    return {"response": testResult}

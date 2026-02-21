@@ -11,21 +11,23 @@ if not GEMINI_API_KEY:
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 def geminiCall():
-    response = client.models.generate_content(
+  response = client.models.generate_content(
     model="gemini-3-flash-preview", contents= 
     '''You are an inventory assistant. I will provide store data as CSV. 
-Please generate restock suggestions in **strict JSON format**, following this schema:
+      Please generate restock suggestions in **strict JSON format**, following this schema:
+`
+    [ 
+      {
+      "sku": "<SKU>",
+      "product_name": "<Product Name>",
+      "restock_quantity": <integer>,
+      "priority": "<low|medium|high>"
+      }
+    ]
 
-[
-  {
-    "sku": "<SKU>",
-    "product_name": "<Product Name>",
-    "restock_quantity": <integer>,
-    "priority": "<low|medium|high>"
-  }
-]
+    Do not include explanations, markdown, or extra characters. Only return valid JSON. If you do not see any data return an open bracket'''
 
-Do not include explanations, markdown, or extra characters. Only return valid JSON.'''
-
+  )
   return response.text
-)
+
+print(geminiCall())
