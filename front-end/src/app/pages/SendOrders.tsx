@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import emailjs from '@emailjs/browser';
 import { useInventory } from '../context/InventoryContext';
 import { formatCurrency } from '../utils/calculations';
 import { Send, CheckCircle2, Package } from 'lucide-react';
@@ -10,6 +11,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Checkbox } from '../components/ui/checkbox';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Textarea } from '../components/ui/textarea';
+
+const EMAILJS_SERVICE_ID = 'service_frdp939';
+const EMAILJS_TEMPLATE_ID = 'contact_form';
+const EMAILJS_USER_ID = import.meta.env.VITE_EMAILJS_USER_ID ?? '';
+
+function escapeHtml(text: string): string {
+  const div = { textContent: text };
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 interface OrderItem {
   productId: string;
@@ -26,6 +40,8 @@ export function SendOrders() {
   const [vendorEmail, setVendorEmail] = useState('vendor@example.com');
   const [orderNotes, setOrderNotes] = useState('');
   const [orderSent, setOrderSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const handleSelectProduct = (productId: string, checked: boolean) => {
     const newSelected = new Set(selectedProducts);
@@ -63,20 +79,71 @@ export function SendOrders() {
     .filter((item): item is OrderItem => item !== null);
 
   const totalOrderCost = orderItems.reduce((sum, item) => sum + item.totalCost, 0);
+  const totalUnits = orderItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleSendOrder = () => {
-    // In a real application, this would send the order via email or API
-    console.log('Sending order to:', vendorEmail);
-    console.log('Order items:', orderItems);
-    console.log('Notes:', orderNotes);
-    
-    setOrderSent(true);
-    setTimeout(() => {
-      setOrderSent(false);
-      setSelectedProducts(new Set());
-      setQuantities({});
-      setOrderNotes('');
-    }, 3000);
+  const buildOrderSummaryHtml = () => {
+    const rows = orderItems
+      .map(
+        (item) =>
+          `<tr><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151;">${escapeHtml(item.productName)}</td><td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#111;text-align:right;">${item.quantity} × ${formatCurrency(item.costPerUnit)} = ${formatCurrency(item.totalCost)}</td></tr>`
+      )
+      .join('');
+    return `
+<div style="font-family:sans-serif;max-width:560px;">
+  <h2 style="margin:0 0 8px;font-size:1.25rem;color:#111;">Order Summary</h2>
+  <p style="margin:0 0 16px;color:#6b7280;font-size:0.875rem;">Purchase order from inventory system</p>
+  <div style="background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:16px;">
+    <div style="display:table;width:100%;margin-bottom:16px;">
+      <div style="display:table-cell;"><span style="font-size:0.875rem;color:#6b7280;">Total Items</span><br><span style="font-size:1.5rem;color:#111;">${orderItems.length}</span></div>
+      <div style="display:table-cell;"><span style="font-size:0.875rem;color:#6b7280;">Total Units</span><br><span style="font-size:1.5rem;color:#111;">${totalUnits}</span></div>
+    </div>
+    <div style="padding-top:16px;border-top:1px solid #e5e7eb;">
+      <span style="font-size:0.875rem;color:#6b7280;">Total Order Cost</span><br>
+      <span style="font-size:1.875rem;color:#111;">${formatCurrency(totalOrderCost)}</span>
+    </div>
+  </div>
+  <p style="font-size:0.875rem;color:#374151;margin:0 0 8px;">Items in order:</p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.875rem;">
+    ${rows}
+  </table>
+  ${orderNotes ? `<p style="margin-top:16px;font-size:0.875rem;color:#6b7280;"><strong>Notes:</strong> ${escapeHtml(orderNotes)}</p>` : ''}
+</div>`;
+  };
+
+  const handleSendOrder = async () => {
+    if (!EMAILJS_USER_ID) {
+      setSendError('EmailJS is not configured. Add VITE_EMAILJS_USER_ID to your .env file.');
+      return;
+    }
+    setSendError(null);
+    setSending(true);
+    try {
+      emailjs.init(EMAILJS_USER_ID);
+      const templateParams = {
+        to_email: vendorEmail,
+        vendor_email: vendorEmail,
+        order_notes: orderNotes || '(None)',
+        total_items: String(orderItems.length),
+        total_units: String(totalUnits),
+        total_cost: formatCurrency(totalOrderCost),
+        order_summary_html: buildOrderSummaryHtml(),
+        order_items_text: orderItems
+          .map((item) => `${item.productName}: ${item.quantity} × ${formatCurrency(item.costPerUnit)} = ${formatCurrency(item.totalCost)}`)
+          .join('\n'),
+      };
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+      setOrderSent(true);
+      setTimeout(() => {
+        setOrderSent(false);
+        setSelectedProducts(new Set());
+        setQuantities({});
+        setOrderNotes('');
+      }, 3000);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Failed to send email');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -226,17 +293,22 @@ export function SendOrders() {
                 </div>
               </div>
 
+              {sendError && (
+                <p className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{sendError}</p>
+              )}
               <Button 
                 onClick={handleSendOrder} 
                 className="w-full" 
                 size="lg"
-                disabled={orderSent}
+                disabled={orderSent || sending}
               >
                 {orderSent ? (
                   <>
                     <CheckCircle2 className="w-5 h-5 mr-2" />
                     Order Sent Successfully!
                   </>
+                ) : sending ? (
+                  <>Sending…</>
                 ) : (
                   <>
                     <Send className="w-5 h-5 mr-2" />
