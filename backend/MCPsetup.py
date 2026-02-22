@@ -15,17 +15,34 @@ def geminiCall():
     model="gemini-3-flash-preview", contents= 
     '''You are an inventory assistant. I will provide store data as CSV. 
       Please generate restock suggestions in **strict JSON format**, following this schema:
-`
-    [ 
-      {
-      "sku": "<SKU>",
-      "product_name": "<Product Name>",
-      "restock_quantity": <integer>,
-      "priority": "<low|medium|high>"
-      }
-    ]
+      "inventory": [
+        {
+        "product_name": "<Product Name>",
+        "stock": <current stock>,
+        "restock_quantity": <integer>,
+        "priority": "<low|medium|high>"
+        }
+      ]
 
-    Do not include explanations, markdown, or extra characters. Only return valid JSON. If you do not see any data return an open bracket'''
+    Do not include explanations, markdown, or extra characters. Only return valid JSON. If you do not see any data return an open {}. Enssure indentation is correct for JSON. Here is the data: '''
+    + 
+    '''{
+	    "inventory": [
+		    {
+			    "sku": "Turkey",
+			    "stock": 50,
+			    "Past Sales in 14 Days": 60,
+			    "Holiday": "Thanksgiving"
+		    },
+		    {
+			    "sku": "Swimsuits",
+			    "stock": 300,
+			    "Past Sales in 14 Days": 6,
+			    "Holiday": "Thanksgiving"
+		    }
+	    ]
+    }'''
+
 
   )
   return response.text
