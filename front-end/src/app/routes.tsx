@@ -1,9 +1,9 @@
 import { createBrowserRouter } from 'react-router';
 import { Layout } from './components/Layout';
 import { InventoryOverview } from './pages/InventoryOverview';
-import { DemandForecast } from './pages/DemandForecast';
-import { SmartRestock } from './pages/SmartRestock';
-import { ManageProducts } from './pages/ManageProducts';
+import { FutureRiskAndAction } from './pages/FutureRiskAndAction';
+import { SendOrders } from './pages/SendOrders';
+import { Navigate } from 'react-router';
 
 export const router = createBrowserRouter([
   {
@@ -11,9 +11,14 @@ export const router = createBrowserRouter([
     Component: Layout,
     children: [
       { index: true, Component: InventoryOverview },
-      { path: 'forecast', Component: DemandForecast },
-      { path: 'restock', Component: SmartRestock },
-      { path: 'products', Component: ManageProducts },
+      { path: 'analysis', Component: FutureRiskAndAction },
+      { path: 'orders', Component: SendOrders },
+      // Redirect old routes to home
+      { path: 'forecast', element: <Navigate to="/" replace /> },
+      { path: 'restock', element: <Navigate to="/" replace /> },
+      { path: 'products', element: <Navigate to="/" replace /> },
+      // Catch all other routes
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
 ]);

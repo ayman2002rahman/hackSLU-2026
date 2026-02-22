@@ -1,14 +1,13 @@
 import { Link, Outlet, useLocation } from 'react-router';
-import { Package, TrendingUp, ShoppingCart, Settings } from 'lucide-react';
+import { Package, TrendingUp, Send } from 'lucide-react';
 
 export function Layout() {
   const location = useLocation();
 
   const navItems = [
     { path: '/', label: 'Current State', icon: Package },
-    { path: '/forecast', label: 'Future Risk', icon: TrendingUp },
-    { path: '/restock', label: 'Optimal Action', icon: ShoppingCart },
-    { path: '/products', label: 'Manage Products', icon: Settings },
+    { path: '/analysis', label: 'Future Risk & Action', icon: TrendingUp },
+    { path: '/orders', label: 'Send Orders', icon: Send },
   ];
 
   return (

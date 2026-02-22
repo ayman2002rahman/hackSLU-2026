@@ -1,13 +1,46 @@
 import { useInventory } from '../context/InventoryContext';
 import { calculateInventoryMetrics, formatCurrency } from '../utils/calculations';
-import { AlertTriangle, TrendingDown, DollarSign, Package } from 'lucide-react';
+import { TrendingDown, DollarSign, RotateCcw, Edit2, Save, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Badge } from '../components/ui/badge';
+import { ScrollArea } from '../components/ui/scroll-area';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { useState } from 'react';
+import { Product } from '../types/inventory';
 
 export function InventoryOverview() {
-  const { products } = useInventory();
+  const { products, updateProduct } = useInventory();
   const metrics = calculateInventoryMetrics(products);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Product>>({});
+
+  const handleResetData = () => {
+    localStorage.removeItem('inventory_products');
+    window.location.reload();
+  };
+
+  const handleEdit = (product: Product) => {
+    setEditingId(product.id);
+    setEditForm({
+      name: product.name,
+      currentStock: product.currentStock,
+      costPerUnit: product.costPerUnit,
+      sellingPrice: product.sellingPrice,
+      averageDailySales: product.averageDailySales,
+    });
+  };
+
+  const handleSave = (id: string) => {
+    updateProduct(id, editForm);
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
 
   const summaryCards = [
     {
@@ -25,22 +58,6 @@ export function InventoryOverview() {
       icon: TrendingDown,
       color: 'text-green-600',
       bgColor: 'bg-green-100',
-    },
-    {
-      title: 'Potential Profit',
-      value: formatCurrency(metrics.totalPotentialProfit),
-      description: 'Profit locked in stock',
-      icon: Package,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100',
-    },
-    {
-      title: 'Risk Alerts',
-      value: metrics.lowStockCount + metrics.slowMovingCount,
-      description: `${metrics.lowStockCount} low stock, ${metrics.slowMovingCount} slow moving`,
-      icon: AlertTriangle,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-100',
     },
   ];
 
@@ -77,10 +94,10 @@ export function InventoryOverview() {
       <Card>
         <CardHeader>
           <CardTitle>Product Details</CardTitle>
-          <CardDescription>Detailed breakdown of each product in inventory</CardDescription>
+          <CardDescription>Detailed breakdown of each product in inventory (click edit to modify)</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <ScrollArea className="h-[600px]">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -88,48 +105,127 @@ export function InventoryOverview() {
                   <TableHead className="text-right">Current Stock</TableHead>
                   <TableHead className="text-right">Cost/Unit</TableHead>
                   <TableHead className="text-right">Selling Price</TableHead>
+                  <TableHead className="text-right">Avg Daily Sales</TableHead>
                   <TableHead className="text-right">Inventory Value</TableHead>
-                  <TableHead className="text-right">Days of Inventory</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {products.map((product) => {
+                  const isEditing = editingId === product.id;
                   const inventoryValue = product.currentStock * product.costPerUnit;
-                  const daysOfInventory = product.currentStock / (product.averageDailySales || 1);
-                  
-                  let status: { label: string; variant: 'default' | 'destructive' | 'secondary' | 'outline' } = {
-                    label: 'Normal',
-                    variant: 'default',
-                  };
-
-                  if (daysOfInventory < 7) {
-                    status = { label: 'Low Stock', variant: 'destructive' };
-                  } else if (daysOfInventory > 30) {
-                    status = { label: 'Slow Moving', variant: 'secondary' };
-                  }
 
                   return (
-                    <TableRow key={product.id}>
-                      <TableCell>{product.name}</TableCell>
-                      <TableCell className="text-right">{product.currentStock}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(product.costPerUnit)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(product.sellingPrice)}</TableCell>
+                    <TableRow key={product.id} className={isEditing ? 'bg-blue-50' : ''}>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input
+                            value={editForm.name || ''}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="w-full"
+                          />
+                        ) : (
+                          product.name
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            value={editForm.currentStock || 0}
+                            onChange={(e) => setEditForm({ ...editForm, currentStock: Number(e.target.value) })}
+                            className="w-24 text-right"
+                          />
+                        ) : (
+                          product.currentStock
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editForm.costPerUnit || 0}
+                            onChange={(e) => setEditForm({ ...editForm, costPerUnit: Number(e.target.value) })}
+                            className="w-24 text-right"
+                          />
+                        ) : (
+                          formatCurrency(product.costPerUnit)
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editForm.sellingPrice || 0}
+                            onChange={(e) => setEditForm({ ...editForm, sellingPrice: Number(e.target.value) })}
+                            className="w-24 text-right"
+                          />
+                        ) : (
+                          formatCurrency(product.sellingPrice)
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            value={editForm.averageDailySales || 0}
+                            onChange={(e) => setEditForm({ ...editForm, averageDailySales: Number(e.target.value) })}
+                            className="w-24 text-right"
+                          />
+                        ) : (
+                          product.averageDailySales
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">{formatCurrency(inventoryValue)}</TableCell>
                       <TableCell className="text-right">
-                        {daysOfInventory.toFixed(1)} days
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={status.variant}>{status.label}</Badge>
+                        {isEditing ? (
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleSave(product.id)}
+                            >
+                              <Save className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={handleCancel}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEdit(product)}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
                 })}
               </TableBody>
             </Table>
-          </div>
+          </ScrollArea>
         </CardContent>
       </Card>
+
+      {/* Reset Data Button */}
+      <div className="flex justify-end">
+        <Button
+          variant="destructive"
+          onClick={handleResetData}
+        >
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Data
+        </Button>
+      </div>
     </div>
   );
 }
