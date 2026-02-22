@@ -11,12 +11,26 @@ import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { ScrollArea } from '../components/ui/scroll-area';
-import { Calendar, Cloud, TrendingUp, AlertCircle } from 'lucide-react';
+import { Calendar, Cloud, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
+
+export interface ApiForecastRow {
+  productName: string;
+  currentStock: number;
+  forecast: number;
+  shortageUnits: number;
+  criticality: string;
+  profitAtRisk: number;
+}
 
 export function FutureRiskAndAction() {
   const { products } = useInventory();
   const [forecastDays, setForecastDays] = useState<number>(14);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [loadingAnalyze, setLoadingAnalyze] = useState(false);
+  const [apiForecastTable, setApiForecastTable] = useState<ApiForecastRow[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
   
   // Context gathering form
   const [contextData, setContextData] = useState({
@@ -169,8 +183,45 @@ export function FutureRiskAndAction() {
   const totalBudgetUsed = recommendations.reduce((sum, rec) => sum + rec.restockCost, 0);
   const totalProfitProtected = recommendations.reduce((sum, rec) => sum + rec.profitProtected, 0);
 
-  const handleAnalyze = () => {
-    setShowAnalysis(true);
+  const handleAnalyze = async () => {
+    setApiError(null);
+    setLoadingAnalyze(true);
+    try {
+      const payload = {
+        products: products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          currentStock: p.currentStock,
+          costPerUnit: p.costPerUnit,
+          sellingPrice: p.sellingPrice,
+          averageDailySales: p.averageDailySales,
+        })),
+        context: {
+          upcomingHolidays: contextData.upcomingHolidays,
+          weatherForecast: contextData.weatherForecast,
+          specialEvents: contextData.specialEvents,
+          seasonalTrends: contextData.seasonalTrends,
+          budget: contextData.budget,
+        },
+        forecastDays,
+      };
+      const res = await fetch(`${API_BASE}/analyze-risk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error((errBody as { detail?: string }).detail || res.statusText);
+      }
+      const data = (await res.json()) as { forecastTable?: ApiForecastRow[] };
+      setApiForecastTable(Array.isArray(data.forecastTable) ? data.forecastTable : []);
+      setShowAnalysis(true);
+    } catch (e) {
+      setApiError(e instanceof Error ? e.message : 'Analysis failed');
+    } finally {
+      setLoadingAnalyze(false);
+    }
   };
 
   return (
@@ -181,8 +232,19 @@ export function FutureRiskAndAction() {
         <p className="text-gray-600">Analyze risks and get smart restocking recommendations</p>
       </div>
 
+      {/* Loading overlay when waiting for API */}
+      {loadingAnalyze && (
+        <Card className="border-blue-200 bg-blue-50/80">
+          <CardContent className="py-16 flex flex-col items-center justify-center gap-4">
+            <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+            <p className="text-lg text-gray-700">Analyzing risk & generating recommendations…</p>
+            <p className="text-sm text-gray-500">Using your product data and business context with AI</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Context Gathering Section */}
-      {!showAnalysis && (
+      {!showAnalysis && !loadingAnalyze && (
         <Card>
           <CardHeader>
             <CardTitle>Business Context</CardTitle>
@@ -271,10 +333,22 @@ export function FutureRiskAndAction() {
                 </div>
               </div>
 
+              {apiError && (
+                <p className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{apiError}</p>
+              )}
               <div className="flex justify-end pt-4">
-                <Button onClick={handleAnalyze} size="lg">
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  Analyze Risk & Generate Recommendations
+                <Button onClick={handleAnalyze} size="lg" disabled={loadingAnalyze}>
+                  {loadingAnalyze ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Analyzing…
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      Analyze Risk & Generate Recommendations
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -351,16 +425,54 @@ export function FutureRiskAndAction() {
             </CardContent>
           </Card>
 
-          {/* Table 1: Stockout Risk */}
+          {/* Table 1: Stockout Risk (API forecast when available) */}
           <Card>
             <CardHeader>
               <CardTitle>Stockout Risk (Money We Might Lose)</CardTitle>
               <CardDescription>
-                If we do nothing, these products will cost us money
+                {apiForecastTable.length > 0
+                  ? 'AI-analyzed forecast from your product data and business context'
+                  : 'If we do nothing, these products will cost us money'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {stockoutRisk.length > 0 ? (
+              {apiForecastTable.length > 0 ? (
+                <ScrollArea className="h-[400px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead className="text-right">Current Stock</TableHead>
+                        <TableHead className="text-right">Forecast ({forecastDays} days)</TableHead>
+                        <TableHead className="text-right">Shortage Units</TableHead>
+                        <TableHead className="text-right">Criticality</TableHead>
+                        <TableHead className="text-right">Profit at Risk</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {apiForecastTable.map((row, index) => {
+                        const crit = (row.criticality || '').toLowerCase();
+                        const variant: 'default' | 'destructive' | 'secondary' =
+                          crit === 'high' ? 'destructive' : crit === 'medium' ? 'default' : 'secondary';
+                        return (
+                          <TableRow key={index}>
+                            <TableCell>{row.productName}</TableCell>
+                            <TableCell className="text-right">{row.currentStock}</TableCell>
+                            <TableCell className="text-right">{row.forecast}</TableCell>
+                            <TableCell className="text-right text-orange-600">{row.shortageUnits}</TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant={variant}>{row.criticality || 'Low'}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right text-red-600">
+                              {formatCurrency(row.profitAtRisk)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              ) : stockoutRisk.length > 0 ? (
                 <ScrollArea className="h-[400px]">
                   <Table>
                     <TableHeader>
