@@ -1,24 +1,34 @@
 import { useInventory } from '../context/InventoryContext';
 import { calculateInventoryMetrics, formatCurrency } from '../utils/calculations';
-import { TrendingDown, DollarSign, RotateCcw, Edit2, Save, X } from 'lucide-react';
+import { TrendingDown, DollarSign, RotateCcw, Edit2, Save, X, Trash2, Plus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { useState } from 'react';
 import { Product } from '../types/inventory';
 
+const emptyNewProduct: Omit<Product, 'id'> = {
+  name: '',
+  currentStock: 0,
+  costPerUnit: 0,
+  sellingPrice: 0,
+  averageDailySales: 0,
+};
+
 export function InventoryOverview() {
-  const { products, updateProduct } = useInventory();
+  const { products, loading, error, refetch, updateProduct, deleteProduct, addProduct } = useInventory();
   const metrics = calculateInventoryMetrics(products);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProduct, setNewProduct] = useState<Omit<Product, 'id'>>(emptyNewProduct);
+  const [addError, setAddError] = useState<string | null>(null);
 
-  const handleResetData = () => {
-    localStorage.removeItem('inventory_products');
-    window.location.reload();
-  };
+  const handleRefresh = () => refetch();
 
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
@@ -29,17 +39,46 @@ export function InventoryOverview() {
       sellingPrice: product.sellingPrice,
       averageDailySales: product.averageDailySales,
     });
+    setSaveError(null);
   };
 
-  const handleSave = (id: string) => {
-    updateProduct(id, editForm);
-    setEditingId(null);
-    setEditForm({});
+  const handleSave = async (id: string) => {
+    setSaveError(null);
+    try {
+      await updateProduct(id, editForm);
+      setEditingId(null);
+      setEditForm({});
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save');
+    }
   };
 
   const handleCancel = () => {
     setEditingId(null);
     setEditForm({});
+    setSaveError(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Remove this product from inventory?')) return;
+    setSaveError(null);
+    try {
+      await deleteProduct(id);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to delete');
+    }
+  };
+
+  const handleAddProduct = async () => {
+    if (!newProduct.name.trim()) return;
+    setAddError(null);
+    try {
+      await addProduct(newProduct);
+      setNewProduct(emptyNewProduct);
+      setShowAddForm(false);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : 'Failed to add product');
+    }
   };
 
   const summaryCards = [
@@ -69,6 +108,21 @@ export function InventoryOverview() {
         <p className="text-gray-600">Your current inventory situation and financial risk</p>
       </div>
 
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-4">
+            <p className="text-red-700">{error}</p>
+            <Button variant="outline" size="sm" className="mt-2" onClick={handleRefresh}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {loading && (
+        <p className="text-gray-500">Loading products…</p>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map((card) => {
@@ -90,13 +144,94 @@ export function InventoryOverview() {
         })}
       </div>
 
+      {/* Add Product */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plus className="w-5 h-5" />
+            Add Product
+          </CardTitle>
+          <CardDescription>Add a new product to inventory (saved to Supabase)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {showAddForm ? (
+            <div className="space-y-4">
+              {addError && <p className="text-sm text-red-600">{addError}</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="space-y-2">
+                  <Label>Product Name</Label>
+                  <Input
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                    placeholder="e.g. Organic Coffee"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Current Stock</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={newProduct.currentStock || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, currentStock: Number(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cost/Unit</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={newProduct.costPerUnit || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, costPerUnit: Number(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Selling Price</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={newProduct.sellingPrice || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, sellingPrice: Number(e.target.value) || 0 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Avg Daily Sales</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={newProduct.averageDailySales || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, averageDailySales: Number(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleAddProduct} disabled={!newProduct.name.trim()}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Save Product
+                </Button>
+                <Button variant="outline" onClick={() => { setShowAddForm(false); setAddError(null); setNewProduct(emptyNewProduct); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="outline" onClick={() => setShowAddForm(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add New Product
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Product Details Table */}
       <Card>
         <CardHeader>
           <CardTitle>Product Details</CardTitle>
-          <CardDescription>Detailed breakdown of each product in inventory (click edit to modify)</CardDescription>
+          <CardDescription>Detailed breakdown of each product in inventory (click edit to modify). Inventory Value is derived (current stock × cost/unit).</CardDescription>
         </CardHeader>
         <CardContent>
+          {saveError && <p className="text-sm text-red-600 mb-4">{saveError}</p>}
           <ScrollArea className="h-[600px]">
             <Table>
               <TableHeader>
@@ -198,13 +333,23 @@ export function InventoryOverview() {
                             </Button>
                           </div>
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleEdit(product)}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
+                          <div className="flex gap-1 justify-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700"
+                              onClick={() => handleDelete(product.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
@@ -216,14 +361,11 @@ export function InventoryOverview() {
         </CardContent>
       </Card>
 
-      {/* Reset Data Button */}
+      {/* Refresh */}
       <div className="flex justify-end">
-        <Button
-          variant="destructive"
-          onClick={handleResetData}
-        >
+        <Button variant="outline" onClick={handleRefresh} disabled={loading}>
           <RotateCcw className="w-4 h-4 mr-2" />
-          Reset Data
+          Refresh from Supabase
         </Button>
       </div>
     </div>
