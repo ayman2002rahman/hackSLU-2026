@@ -151,7 +151,7 @@ export function InventoryOverview() {
             <Plus className="w-5 h-5" />
             Add Product
           </CardTitle>
-          <CardDescription>Add a new product to inventory (saved to Supabase)</CardDescription>
+          <CardDescription>Add a new product to inventory</CardDescription>
         </CardHeader>
         <CardContent>
           {showAddForm ? (
@@ -365,7 +365,7 @@ export function InventoryOverview() {
       <div className="flex justify-end">
         <Button variant="outline" onClick={handleRefresh} disabled={loading}>
           <RotateCcw className="w-4 h-4 mr-2" />
-          Refresh from Supabase
+          Refresh
         </Button>
       </div>
     </div>

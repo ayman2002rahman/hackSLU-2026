@@ -44,7 +44,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProducts = useCallback(async () => {
     if (!supabase) {
-      setError('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env');
+      setError('Inventory is not configured. Check your connection settings.');
       setProducts([]);
       setLoading(false);
       return;
